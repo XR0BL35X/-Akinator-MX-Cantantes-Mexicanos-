@@ -1,0 +1,520 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Akinator MX — Cantantes Mexicanos (Auto-Adivina ≥ 90%)</title>
+<style>
+:root{
+  --bg:#0a0f1f; --card:#0e1530; --muted:#9fb0d1; --bdr:#243466;
+  --yes:#10b981; --no:#ef4444; --unk:#f59e0b;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, Arial;
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#071228 0%,#0b1731 100%);color:#e8eef7;min-height:100vh}
+.wrap{max-width:1200px;margin:0 auto;padding:24px;display:grid;grid-template-columns:1fr 380px;gap:20px}
+header{grid-column:1/-1}
+h1{margin:0;font-size:24px}
+.lead{color:var(--muted);margin-top:6px}
+.card{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.01));border:1px solid var(--bdr);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.panel{padding:16px}
+.controls{display:flex;gap:8px;flex-wrap:wrap}
+.btn{padding:10px 14px;border-radius:10px;border:1px solid var(--bdr);cursor:pointer;font-weight:700;background:#131e45;color:#e8eef7}
+.btn:hover{filter:brightness(1.08)}
+.btn.yes{background:linear-gradient(90deg,#10b981,#059669);border:0}
+.btn.no{background:linear-gradient(90deg,#ef4444,#c0262e);border:0}
+.btn.unk{background:linear-gradient(90deg,#f59e0b,#d97706);border:0}
+.badge{font-size:12px;padding:4px 8px;border-radius:999px;background:#0f1a44;border:1px solid var(--bdr);color:var(--muted);display:inline-block}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:12px}
+.card-mini{display:flex;gap:10px;align-items:center;padding:10px}
+.card-mini img{width:64px;height:64px;border-radius:8px;object-fit:cover;border:1px solid var(--bdr)}
+.meta .name{font-weight:800}
+.pill{font-size:12px;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.04);color:var(--muted);display:inline-block;margin-top:4px}
+.kv{display:grid;grid-template-columns:130px 1fr;gap:8px}
+input,select,textarea{width:100%;padding:8px 10px;border-radius:10px;border:1px solid var(--bdr);background:#0b1228;color:#e8eef7}
+hr{border:none;border-top:1px solid var(--bdr);margin:12px 0}
+@media (max-width:980px){ .wrap{grid-template-columns:1fr} }
+small{color:var(--muted)}
+.progress{height:8px;background:#0b1228;border:1px solid var(--bdr);border-radius:999px;overflow:hidden}
+.progress>div{height:100%;background:#3b82f6}
+.question{font-size:18px;font-weight:800}
+.history{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.history .item{font-size:14px;color:#c9d7ff}
+.history .ans-yes{color:#10b981}
+.history .ans-no{color:#ef4444}
+.history .ans-unk{color:#fbbf24}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Akinator MX — Cantantes Mexicanos</h1>
+    <p class="lead">Preguntas <b>naturales</b>, motor probabilístico, <b>auto-adivina ≥ 90%</b> y <b>aprendizaje</b>.</p>
+  </header>
+
+  <main class="card panel">
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
+      <span class="badge">Candidatos: <b id="candCount">--</b></span>
+      <span class="badge">Preguntas: <b id="qCount">0</b></span>
+      <span class="badge">Confianza top: <b id="topConf">--</b></span>
+      <div style="flex:1"></div>
+      <div class="controls">
+        <button id="btnStart" class="btn">Iniciar</button>
+        <button id="btnRestart" class="btn">Reiniciar</button>
+        <!-- El botón “Adivinar” queda como opcional; ya no es necesario -->
+        <button id="btnGuess" class="btn">Adivinar</button>
+        <button id="btnExport" class="btn">Exportar KB</button>
+        <label class="btn" style="cursor:pointer">Importar KB <input id="fileImport" type="file" accept=".json" style="display:none"></label>
+      </div>
+    </div>
+
+    <div class="card panel" style="margin-bottom:12px">
+      <div class="question" id="questionText">Pulsa “Iniciar” para empezar.</div>
+      <div class="controls" style="margin-top:10px">
+        <button class="btn yes" id="btnYes" disabled>SÍ</button>
+        <button class="btn no" id="btnNo" disabled>NO</button>
+        <button class="btn unk" id="btnUnk" disabled>NO SÉ</button>
+      </div>
+      <div style="margin-top:10px"><small id="why"></small></div>
+      <div class="history" id="historyList"></div>
+    </div>
+
+    <div class="card panel">
+      <div style="font-weight:800;margin-bottom:8px">Ranking de candidatos</div>
+      <div class="grid" id="rankGrid"></div>
+    </div>
+  </main>
+
+  <aside class="card panel">
+    <div style="font-weight:800;margin-bottom:8px">Agregar / Aprender</div>
+    <div class="kv">
+      <div>Nombre</div><div><input id="a_nombre" placeholder="Nombre completo"></div>
+      <div>Imagen (URL)</div><div><input id="a_image" placeholder="https://... .jpg / .png (opcional)"></div>
+      <div>Género musical</div><div><input id="a_genmus" placeholder="pop, ranchera, rock..."></div>
+      <div>Época</div><div><select id="a_epoca"><option value="">—</option><option>clásico</option><option>moderno</option><option>actual</option></select></div>
+      <div>Género</div><div><select id="a_genero"><option value="">—</option><option>masculino</option><option>femenino</option><option>mixto</option></select></div>
+      <div>Origen</div><div><input id="a_origen" placeholder="CDMX, Jalisco, ..."></div>
+      <div>Tipo</div><div><select id="a_tipo"><option value="">—</option><option>solista</option><option>grupo</option></select></div>
+      <div>Vivo</div><div><select id="a_vivo"><option value="">—</option><option>true</option><option>false</option></select></div>
+      <div>Sombrero</div><div><select id="a_sombrero"><option value="">—</option><option>true</option><option>false</option></select></div>
+      <div>Grammy</div><div><select id="a_grammy"><option value="">—</option><option>true</option><option>false</option></select></div>
+    </div>
+    <div class="controls" style="margin-top:8px">
+      <button id="btnAdd" class="btn yes">Agregar a KB</button>
+      <button id="btnClear" class="btn">Limpiar</button>
+    </div>
+
+    <hr>
+    <div style="font-weight:800;margin-bottom:8px">Aprendizaje guiado (si el sistema falla)</div>
+    <div class="kv">
+      <div>Quién era</div><div><input id="l_nombre" placeholder="Nombre correcto"></div>
+      <div>Imagen (URL)</div><div><input id="l_image" placeholder="https://... (opcional)"></div>
+      <div>Atributo clave</div>
+      <div>
+        <select id="l_attr">
+          <option value="genmus">genmus</option>
+          <option value="epoca">epoca</option>
+          <option value="genero">genero</option>
+          <option value="origen">origen</option>
+          <option value="tipo">tipo</option>
+          <option value="vivo">vivo</option>
+          <option value="usa_sombrero">usa_sombrero</option>
+          <option value="grammy">grammy</option>
+        </select>
+      </div>
+      <div>Valor del atributo</div><div><input id="l_value" placeholder="pop / Jalisco / true / false ..."></div>
+    </div>
+    <div class="controls" style="margin-top:8px">
+      <button id="btnLearn" class="btn unk">Aprender diferencia</button>
+    </div>
+    <small>Se guarda en tu navegador (localStorage).</small>
+  </aside>
+</div>
+
+<script>
+// ====== Utilidades ======
+const $ = id => document.getElementById(id);
+const AVATAR = name => 'https://ui-avatars.com/api/?name='+encodeURIComponent(name)+'&background=0D1117&color=efefef&size=256';
+
+const BOOL = ['vivo','usa_sombrero','grammy'];
+const CAT  = ['genmus','epoca','genero','origen','tipo'];
+const ALL_ATTRS = [...CAT, ...BOOL];
+
+// Umbral de auto-adivinanza (90%)
+const AUTO_GUESS_THRESHOLD = 0.90;
+
+const KB_INITIAL = [
+  {"nombre":"Vicente Fernández","genmus":"ranchera","epoca":"clásico","genero":"masculino","vivo":false,"usa_sombrero":true,"grammy":true,"origen":"Jalisco","tipo":"solista"},
+  {"nombre":"Juan Gabriel","genmus":"pop","epoca":"clásico","genero":"masculino","vivo":false,"usa_sombrero":false,"grammy":true,"origen":"Michoacán","tipo":"solista"},
+  {"nombre":"Luis Miguel","genmus":"pop","epoca":"moderno","genero":"masculino","vivo":true,"usa_sombrero":false,"grammy":true,"origen":"CDMX","tipo":"solista"},
+  {"nombre":"Thalía","genmus":"pop","epoca":"moderno","genero":"femenino","vivo":true,"usa_sombrero":false,"grammy":true,"origen":"CDMX","tipo":"solista"},
+  {"nombre":"Christian Nodal","genmus":"regional","epoca":"actual","genero":"masculino","vivo":true,"usa_sombrero":true,"grammy":true,"origen":"Sonora","tipo":"solista"},
+  {"nombre":"Ángela Aguilar","genmus":"regional","epoca":"actual","genero":"femenino","vivo":true,"usa_sombrero":true,"grammy":false,"origen":"Guanajuato","tipo":"solista"},
+  {"nombre":"Belinda","genmus":"pop","epoca":"actual","genero":"femenino","vivo":true,"usa_sombrero":false,"grammy":false,"origen":"CDMX","tipo":"solista"},
+  {"nombre":"Grupo Firme","genmus":"banda","epoca":"actual","genero":"masculino","vivo":true,"usa_sombrero":true,"grammy":true,"origen":"Tijuana","tipo":"grupo"},
+  {"nombre":"Café Tacvba","genmus":"rock","epoca":"moderno","genero":"mixto","vivo":true,"usa_sombrero":false,"grammy":true,"origen":"CDMX","tipo":"grupo"},
+  {"nombre":"Gloria Trevi","genmus":"pop","epoca":"moderno","genero":"femenino","vivo":true,"usa_sombrero":false,"grammy":false,"origen":"Monterrey","tipo":"solista"},
+  {"nombre":"Natalia Lafourcade","genmus":"pop","epoca":"actual","genero":"femenino","vivo":true,"usa_sombrero":false,"grammy":true,"origen":"CDMX","tipo":"solista"},
+  {"nombre":"Alejandro Fernández","genmus":"ranchera","epoca":"moderno","genero":"masculino","vivo":true,"usa_sombrero":true,"grammy":true,"origen":"Jalisco","tipo":"solista"}
+];
+
+const KB_KEY = 'kb_akinator_mx';
+function loadKB(){
+  try{
+    const raw = localStorage.getItem(KB_KEY);
+    if(!raw) return [...KB_INITIAL];
+    const parsed = JSON.parse(raw);
+    if(Array.isArray(parsed) && parsed.length) return parsed;
+    return [...KB_INITIAL];
+  }catch(_){ return [...KB_INITIAL]; }
+}
+function saveKB(arr){ localStorage.setItem(KB_KEY, JSON.stringify(arr)); }
+
+let KB = loadKB();
+let probs = [];
+let asked = [];       // {attr,value,type,questionText,answer}
+let currentQ = null;
+let running = false;
+let autoProposed = false; // evita proponer adivinanza varias veces en el mismo estado
+
+// Verosimilitudes (tuning simple)
+const L_YES_MATCH = 0.85, L_YES_MISM = 0.15;
+const L_NO_MATCH  = 0.15, L_NO_MISM  = 0.85;
+const L_UNK = 0.50;
+
+// ========= Humanización de preguntas =========
+function titleCase(str){
+  return String(str||'')
+    .toLowerCase()
+    .replace(/\b\w/g, c => c.toUpperCase())
+    .replace(/Cdmx/gi,'CDMX');
+}
+function humanizeGenero(v){
+  if(!v) return '';
+  const s = v.toLowerCase();
+  if(s==='masculino') return 'hombre';
+  if(s==='femenino')  return 'mujer';
+  if(s==='mixto')     return 'mixto';
+  return v;
+}
+function prettyQuestion(q){
+  const v = q.type==='bool' ? q.value : String(q.value||'').toLowerCase();
+  switch(q.attr){
+    case 'vivo':          return '¿Sigue vivo o viva?';
+    case 'usa_sombrero':  return '¿Suele usar sombrero?';
+    case 'grammy':        return '¿Ha ganado un premio Grammy?';
+    case 'genmus':        return `¿Canta ${titleCase(v)}?`;
+    case 'epoca':         return `¿Pertenece a la época ${titleCase(v)}?`;
+    case 'genero':        return `¿Es ${humanizeGenero(v)}?`;
+    case 'origen':        return `¿Es originario u originaria de ${titleCase(v)}?`;
+    case 'tipo': {
+      const t = titleCase(v); const art = (t.toLowerCase()==='solista') ? 'una' : 'un';
+      return `¿Es ${art} ${t}?`;
+    }
+    default: {
+      const niceV = (typeof v==='string') ? `"${titleCase(v)}"` : String(v);
+      return `¿${q.attr} es ${niceV}?`;
+    }
+  }
+}
+
+// ========= Probabilidades / preguntas =========
+function normalize(arr){
+  const s = arr.reduce((a,b)=>a+b,0);
+  if(s<=0) return arr.map(_=>1/arr.length);
+  return arr.map(v=>v/s);
+}
+function valueOf(p, attr){ return (p[attr]===undefined || p[attr]===null || p[attr]==="") ? null : p[attr]; }
+function candidates(){ return KB.map((p,i)=>({i, p, prob: probs[i]})).sort((a,b)=>b.prob-a.prob); }
+function asPercent(x){ return (x*100).toFixed(1)+"%"; }
+
+function distinctValues(attr){
+  const set = new Set();
+  KB.forEach(p=>{ const v=valueOf(p,attr); if(v!==null) set.add(String(v)); });
+  return Array.from(set);
+}
+function allQuestions(){
+  const qs = [];
+  CAT.forEach(attr=> distinctValues(attr).forEach(v=> qs.push({attr, value:String(v), type:'cat'})));
+  BOOL.forEach(attr=> ['true','false'].forEach(v=> qs.push({attr, value:(v==='true'), type:'bool'})));
+  const done = new Set(asked.map(a=>a.attr+"|"+String(a.value)));
+  return qs.filter(q=> !done.has(q.attr+"|"+String(q.value)));
+}
+
+function likelihood(answer, matches){
+  if(answer==='yes') return matches ? L_YES_MATCH : L_YES_MISM;
+  if(answer==='no')  return matches ? L_NO_MATCH  : L_NO_MISM;
+  return L_UNK;
+}
+function posteriorForAnswer(q, answer){
+  let post = probs.slice();
+  KB.forEach((p,idx)=>{
+    const v = valueOf(p, q.attr);
+    const matches = (v!==null) && (String(v)===String(q.value));
+    post[idx] = post[idx] * likelihood(answer, matches);
+  });
+  return normalize(post);
+}
+function entropy(arr){
+  let H=0; for(const p of arr){ if(p>1e-12) H += -p*Math.log2(p); }
+  return H;
+}
+function expectedEntropy(q){
+  const answers = ['yes','no','unk'];
+  const weights = {yes:0, no:0, unk:0};
+  KB.forEach((p,idx)=>{
+    const v = valueOf(p,q.attr);
+    const matches = (v!==null) && (String(v)===String(q.value));
+    weights.yes += probs[idx]*likelihood('yes', matches);
+    weights.no  += probs[idx]*likelihood('no',  matches);
+    weights.unk += probs[idx]*likelihood('unk', matches);
+  });
+  const total = weights.yes+weights.no+weights.unk || 1;
+  weights.yes/=total; weights.no/=total; weights.unk/=total;
+
+  let EH=0;
+  for(const a of answers){
+    const post = posteriorForAnswer(q,a);
+    EH += weights[a]*entropy(post);
+  }
+  return EH;
+}
+function pickNextQuestion(){
+  const qs = allQuestions();
+  if(qs.length===0) return null;
+  let best = null, bestScore = Infinity;
+  for(const q of qs){
+    const eh = expectedEntropy(q);
+    if(eh < bestScore){ bestScore=eh; best=q; }
+  }
+  return best;
+}
+
+// ========= Render =========
+function renderRanking(){
+  const grid = $('rankGrid'); grid.innerHTML='';
+  const list = candidates();
+  $('candCount').textContent = list.length;
+  const top = list[0]?.prob || 0;
+  $('topConf').textContent = asPercent(top);
+
+  list.forEach(({p,prob})=>{
+    const img = p.image && p.image.trim() ? p.image.trim() : AVATAR(p.nombre);
+    const el = document.createElement('div');
+    el.className = 'card-mini';
+    el.innerHTML = `
+      <img src="${img}" alt="${p.nombre}" onerror="this.src='${AVATAR('Desconocido')}'">
+      <div class="meta" style="flex:1">
+        <div class="name">${p.nombre}</div>
+        <div class="pill">${p.genmus||'—'} · ${p.epoca||'—'} · ${p.origen||'—'}</div>
+        <div class="progress" style="margin-top:6px"><div style="width:${Math.max(4,prob*100)}%"></div></div>
+        <small>Confianza: ${asPercent(prob)}</small>
+      </div>
+    `;
+    grid.appendChild(el);
+  });
+}
+
+function renderHistory(){
+  const box = $('historyList'); box.innerHTML='';
+  asked.forEach((a, idx)=>{
+    const ansClass = a.answer==='yes' ? 'ans-yes' : a.answer==='no' ? 'ans-no' : 'ans-unk';
+    const ansText  = a.answer==='yes' ? 'Sí' : a.answer==='no' ? 'No' : 'No sé';
+    const row = document.createElement('div');
+    row.className = 'item';
+    row.innerHTML = `<span style="opacity:.7">${idx+1}.</span> ${a.questionText} → <b class="${ansClass}">${ansText}</b>`;
+    box.appendChild(row);
+  });
+}
+
+function renderQuestion(){
+  $('qCount').textContent = String(asked.length);
+
+  if(!running){
+    $('questionText').textContent = 'Pulsa “Iniciar” para empezar.';
+    $('btnYes').disabled = $('btnNo').disabled = $('btnUnk').disabled = true;
+    $('why').textContent = '';
+    renderHistory();
+    return;
+  }
+
+  if(!currentQ){
+    $('questionText').textContent = 'No hay más preguntas útiles. (El sistema intentará adivinar automáticamente si la confianza ≥ 90%).';
+    $('btnYes').disabled = $('btnNo').disabled = $('btnUnk').disabled = false;
+    $('why').textContent = 'Sin más atributos informativos.';
+    renderHistory();
+    return;
+  }
+
+  $('questionText').textContent = prettyQuestion(currentQ);
+  $('btnYes').disabled = $('btnNo').disabled = $('btnUnk').disabled = false;
+  $('why').textContent = 'Pregunta elegida para reducir al máximo la incertidumbre.';
+  renderHistory();
+}
+
+// ========= Auto-adivinanza (≥ 90%) =========
+function checkAutoGuess(){
+  if(!running || autoProposed) return;
+  const list = candidates();
+  if(!list.length) return;
+  const top = list[0];
+  if(top.prob >= AUTO_GUESS_THRESHOLD){
+    autoProposed = true;
+    const conf = asPercent(top.prob);
+    const ok = confirm(`Creo que es ${top.p.nombre} (confianza ${conf}). ¿Acerté?`);
+    if(ok){
+      alert('¡Adiviné! 🎉');
+      running = false;
+      renderQuestion(); renderRanking();
+    }else{
+      // Penaliza al candidato propuesto para que el sistema siga preguntando
+      probs[top.i] = probs[top.i] * 0.1;
+      probs = normalize(probs);
+      currentQ = pickNextQuestion();
+      // Permitimos volver a proponer más adelante si la confianza vuelve a superar el umbral
+      autoProposed = false;
+      renderQuestion(); renderRanking();
+    }
+  }
+}
+
+// ========= Flujo principal =========
+function start(){
+  KB = loadKB();
+  const n = KB.length;
+  probs = Array(n).fill(1/n);
+  asked = [];
+  running = true;
+  autoProposed = false;
+  currentQ = pickNextQuestion();
+  renderQuestion();
+  renderRanking();
+  checkAutoGuess(); // por si arranca con KB muy chica
+}
+function answer(kind){ // 'yes' | 'no' | 'unk'
+  if(!running){ alert('Inicia la partida'); return; }
+  if(!currentQ){ alert('No hay pregunta activa'); return; }
+  asked.push({...currentQ, answer:kind, questionText: prettyQuestion(currentQ)});
+  probs = posteriorForAnswer(currentQ, kind);
+  currentQ = pickNextQuestion();
+  renderQuestion();
+  renderRanking();
+  checkAutoGuess(); // << activar auto-adivinanza tras cada respuesta
+}
+function guess(){
+  const top = candidates()[0];
+  if(!top){ alert('Sin candidatos'); return; }
+  const conf = asPercent(top.prob);
+  const ok = confirm(`¿Es ${top.p.nombre}? (Confianza ${conf})`);
+  if(ok){
+    alert('¡Adiviné! 🎉');
+    running=false; renderQuestion();
+  }else{
+    alert('Dime quién era y una característica clave (panel derecho) para que el sistema aprenda.');
+  }
+}
+
+// ========= Alta manual / Aprendizaje =========
+function parseBool(s){
+  if(s===null||s===undefined||s==='') return null;
+  if(s==='true'||s===true) return true;
+  if(s==='false'||s===false) return false;
+  return null;
+}
+function addToKB(obj){
+  KB.push(obj);
+  saveKB(KB);
+  if(running){
+    probs.push(0.5/KB.length);
+    probs = normalize(probs);
+    checkAutoGuess();
+  }
+  renderRanking();
+}
+$('btnAdd').addEventListener('click', ()=>{
+  const obj = {
+    nombre: $('a_nombre').value.trim(),
+    image: $('a_image').value.trim() || undefined,
+    genmus: $('a_genmus').value.trim() || null,
+    epoca: $('a_epoca').value || null,
+    genero: $('a_genero').value || null,
+    origen: $('a_origen').value.trim() || null,
+    tipo: $('a_tipo').value || null,
+    vivo: parseBool($('a_vivo').value),
+    usa_sombrero: parseBool($('a_sombrero').value),
+    grammy: parseBool($('a_grammy').value)
+  };
+  if(!obj.nombre){ alert('Nombre es requerido'); return; }
+  if(KB.some(k=>k.nombre.toLowerCase()===obj.nombre.toLowerCase())){
+    if(!confirm('Ya existe en la KB. ¿Agregar de todas formas?')) return;
+  }
+  addToKB(obj);
+  alert('Agregado a KB.');
+});
+$('btnClear').addEventListener('click', ()=>{
+  ['a_nombre','a_image','a_genmus','a_epoca','a_genero','a_origen','a_tipo','a_vivo','a_sombrero','a_grammy'].forEach(id=>$(id).value='');
+});
+
+$('btnLearn').addEventListener('click', ()=>{
+  const nombre = $('l_nombre').value.trim();
+  const image  = $('l_image').value.trim();
+  const attr   = $('l_attr').value;
+  const valRaw = $('l_value').value.trim();
+  if(!nombre || !attr || !valRaw){ alert('Completa nombre, atributo y valor'); return; }
+  let val = valRaw;
+  if(BOOL.includes(attr)) val = (valRaw.toLowerCase()==='true');
+
+  let item = KB.find(k=>k.nombre.toLowerCase()===nombre.toLowerCase());
+  if(!item){
+    item = {nombre}; ALL_ATTRS.forEach(a=>item[a]=null);
+    item[attr]=val; if(image) item.image=image;
+    addToKB(item);
+  }else{
+    item[attr]=val; if(image) item.image=image;
+    saveKB(KB);
+  }
+  alert('Aprendido. Se registró la diferencia clave.');
+  if(running){ renderRanking(); checkAutoGuess(); }
+});
+
+// ========= Export / Import =========
+$('btnExport').addEventListener('click', ()=>{
+  const blob = new Blob([JSON.stringify(KB,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='kb_akinator_mx.json';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+$('fileImport').addEventListener('change', (ev)=>{
+  const f = ev.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const arr = JSON.parse(r.result);
+      if(!Array.isArray(arr)) throw new Error('Formato inválido');
+      arr.forEach(o=>{ ALL_ATTRS.forEach(a=>{ if(o[a]===undefined) o[a]=null; }); });
+      KB = arr; saveKB(KB);
+      running=false; autoProposed=false; currentQ=null;
+      renderQuestion(); renderRanking();
+      alert('KB importada.');
+    }catch(e){ alert('Error al importar: '+e.message); }
+  };
+  r.readAsText(f);
+});
+
+// ========= Botones =========
+$('btnStart').addEventListener('click', start);
+$('btnRestart').addEventListener('click', start);
+$('btnGuess').addEventListener('click', guess); // opcional
+$('btnYes').addEventListener('click', ()=>answer('yes'));
+$('btnNo').addEventListener('click',  ()=>answer('no'));
+$('btnUnk').addEventListener('click', ()=>answer('unk'));
+
+// ========= Inicio =========
+(function init(){
+  KB.forEach(o=>{ ALL_ATTRS.forEach(a=>{ if(o[a]===undefined) o[a]=null; }); });
+  renderRanking(); renderQuestion();
+})();
+</script>
+</body>
+</html>
+
